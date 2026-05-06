@@ -463,13 +463,14 @@ plot_obs_pred_window <-function(X,pred.agreg,Y,date.valid,window,sta,ech,agreg){
           theme_bw() + #theme, arriere plan... !!!!! le mettre au début, sinon ça peut ecraser le reste !!!!!!!!!!!
           geom_line(aes(color = modele, size = modele ,linetype=modele)) + #to have the lines
           geom_point(aes(color = modele, size = modele ,linetype=modele),show.legend = FALSE) + #to have the points/shapes
-          #geom_vline(xintercept=as.numeric(datebreaks[1])+12, linetype='dashed', color='grey40',size=2)+#start of the event in chamonix
-          #geom_vline(xintercept=as.numeric(datebreaks[1])+22, linetype='dashed', color='grey40',size=2)+#end of the event in chamonix
+          geom_vline(xintercept=as.numeric(datebreaks[1])+12, linetype='dashed', color='grey40',size=2)+#start of the event in chamonix
+          geom_vline(xintercept=as.numeric(datebreaks[1])+22, linetype='dashed', color='grey40',size=2)+#end of the event in chamonix
           scale_linetype_manual(values=line.type.values) + #solid or dashed lines, and no legend
           #scale_shape_manual(values = shape.values) + #type of shape for the points
           scale_colour_manual(values=color.values) + #colours
           scale_size_manual(values = width.values) + #sizes
           scale_x_date(breaks=datebreaks,labels=date_format("%d")) + #x axes with datebreaks, %d for days number, %b for month
+          # scale_y_continuous(limits = c(-20, 10))+ # pour comparer avec et sans biased à chamonix sur le meme axe y
           labs(x="Date (December 2021)", y= "Temperature (°C)") + #title, x and y axes description
           theme(plot.title = element_text(colour="black", size=25), axis.title.x = element_text(colour="black",size=25),
             axis.title.y = element_text(colour="black",size=25),legend.text=element_text(size=25),
