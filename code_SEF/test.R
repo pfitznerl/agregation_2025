@@ -29,8 +29,6 @@ liste_sta=dir(path = dir_data_with, pattern = paste("donnee_",parametre,"_00_48_
 
 liste_window=c(1253)
 
-liste_agreg<- c("bestConvex","BOA","EWA","MLpol","MLprod","NBM","UNIFORM","bestExpert","raw.arp","mos.arp","raw.cep","mos.cep")
-liste_agreg<- c("BOA","NBM")
 liste_agreg<- c("BOA","sleep_BOA","bestConvex")
 
 
