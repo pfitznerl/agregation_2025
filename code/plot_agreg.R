@@ -38,6 +38,152 @@ plot_map <- function(liste_station){
 }
 
 
+# ###############################################################
+# ###############################################################
+# # https://exchangetuts.com/how-to-add-a-scale-bar-in-ggplot-map-1641041344463996
+# #
+# # Result #
+# #--------#
+# # Return a list whose elements are :
+# #   - rectangle : a data.frame containing the coordinates to draw the first rectangle ;
+# #   - rectangle2 : a data.frame containing the coordinates to draw the second rectangle ;
+# #   - legend : a data.frame containing the coordinates of the legend texts, and the texts as well.
+# #
+# # Arguments : #
+# #-------------#
+# # lon, lat : longitude and latitude of the bottom left point of the first rectangle to draw ;
+# # distanceLon : length of each rectangle ;
+# # distanceLat : width of each rectangle ;
+# # distanceLegend : distance between rectangles and legend texts ;
+# # dist.units : units of distance "km" (kilometers) (default), "nm" (nautical miles), "mi" (statute miles).
+# createScaleBar <- function(lon,lat,distanceLon,distanceLat,distanceLegend, dist.units = "km"){
+#   # First rectangle
+#   bottomRight <- gcDestination(lon = lon, lat = lat, bearing = 90, dist = distanceLon, dist.units = dist.units, model = "WGS84")
+
+#   topLeft <- gcDestination(lon = lon, lat = lat, bearing = 0, dist = distanceLat, dist.units = dist.units, model = "WGS84")
+#   rectangle <- cbind(lon=c(lon, lon, bottomRight[1,"long"], bottomRight[1,"long"], lon),
+#                      lat = c(lat, topLeft[1,"lat"], topLeft[1,"lat"],lat, lat))
+#   rectangle <- data.frame(rectangle, stringsAsFactors = FALSE)
+
+#   # Second rectangle t right of the first rectangle
+#   bottomRight2 <- gcDestination(lon = lon, lat = lat, bearing = 90, dist = distanceLon*2, dist.units = dist.units, model = "WGS84")
+#   rectangle2 <- cbind(lon = c(bottomRight[1,"long"], bottomRight[1,"long"], bottomRight2[1,"long"], bottomRight2[1,"long"], bottomRight[1,"long"]),
+#                       lat=c(lat, topLeft[1,"lat"], topLeft[1,"lat"], lat, lat))
+#   rectangle2 <- data.frame(rectangle2, stringsAsFactors = FALSE)
+
+#   # Now let's deal with the text
+#   onTop <- gcDestination(lon = lon, lat = lat, bearing = 0, dist = distanceLegend, dist.units = dist.units, model = "WGS84")
+#   onTop2 <- onTop3 <- onTop
+#   onTop2[1,"long"] <- bottomRight[1,"long"]
+#   onTop3[1,"long"] <- bottomRight2[1,"long"]
+
+#   legend <- rbind(onTop, onTop2, onTop3)
+#   legend <- data.frame(cbind(legend, text = c(0, distanceLon, distanceLon*2)), stringsAsFactors = FALSE, row.names = NULL)
+#   return(list(rectangle = rectangle, rectangle2 = rectangle2, legend = legend))
+# }
+
+
+# #
+# # Result #
+# #--------#
+# # Returns a list containing :
+# #   - res : coordinates to draw an arrow ;
+# #   - coordinates of the middle of the arrow (where the "N" will be plotted).
+# #
+# # Arguments : #
+# #-------------#
+# # scaleBar : result of createScaleBar() ;
+# # length : desired length of the arrow ;
+# # distance : distance between legend rectangles and the bottom of the arrow ;
+# # dist.units : units of distance "km" (kilometers) (default), "nm" (nautical miles), "mi" (statute miles).
+# createOrientationArrow <- function(scaleBar, length, distance = 1, dist.units = "km"){
+#   lon <- scaleBar$rectangle2[1,1]
+#   lat <- scaleBar$rectangle2[1,2]
+
+#   # Bottom point of the arrow
+#   begPoint <- gcDestination(lon = lon, lat = lat, bearing = 0, dist = distance, dist.units = dist.units, model = "WGS84")
+#   lon <- begPoint[1,"long"]
+#   lat <- begPoint[1,"lat"]
+
+#   # Let us create the endpoint
+#   onTop <- gcDestination(lon = lon, lat = lat, bearing = 0, dist = length, dist.units = dist.units, model = "WGS84")
+
+#   leftArrow <- gcDestination(lon = onTop[1,"long"], lat = onTop[1,"lat"], bearing = 225, dist = length/5, dist.units = dist.units, model = "WGS84")
+
+#   rightArrow <- gcDestination(lon = onTop[1,"long"], lat = onTop[1,"lat"], bearing = 135, dist = length/5, dist.units = dist.units, model = "WGS84")
+
+#   res <- rbind(
+#     cbind(x = lon, y = lat, xend = onTop[1,"long"], yend = onTop[1,"lat"]),
+#     cbind(x = leftArrow[1,"long"], y = leftArrow[1,"lat"], xend = onTop[1,"long"], yend = onTop[1,"lat"]),
+#     cbind(x = rightArrow[1,"long"], y = rightArrow[1,"lat"], xend = onTop[1,"long"], yend = onTop[1,"lat"]))
+
+#   res <- as.data.frame(res, stringsAsFactors = FALSE)
+
+#   # Coordinates from which "N" will be plotted
+#   coordsN <- cbind(x = lon, y = (lat + onTop[1,"lat"])/2)
+
+#   return(list(res = res, coordsN = coordsN))
+# }
+# #
+# # Result #
+# #--------#
+# # This function enables to draw a scale bar on a ggplot object, and optionally an orientation arrow #
+# # Arguments : #
+# #-------------#
+# # lon, lat : longitude and latitude of the bottom left point of the first rectangle to draw ;
+# # distanceLon : length of each rectangle ;
+# # distanceLat : width of each rectangle ;
+# # distanceLegend : distance between rectangles and legend texts ;
+# # dist.units : units of distance "km" (kilometers) (by default), "nm" (nautical miles), "mi" (statute miles) ;
+# # rec.fill, rec2.fill : filling colour of the rectangles (default to white, and black, resp.);
+# # rec.colour, rec2.colour : colour of the rectangles (default to black for both);
+# # legend.colour : legend colour (default to black);
+# # legend.size : legend size (default to 3);
+# # orientation : (boolean) if TRUE (default), adds an orientation arrow to the plot ;
+# # arrow.length : length of the arrow (default to 500 km) ;
+# # arrow.distance : distance between the scale bar and the bottom of the arrow (default to 300 km) ;
+# # arrow.North.size : size of the "N" letter (default to 6).
+# res <- c()
+# scaleBar <- function(lon, lat, distanceLon, distanceLat, distanceLegend, dist.unit = "km", rec.fill = "white", rec.colour = "black", rec2.fill = "black", rec2.colour = "black", legend.colour = "black", legend.size = 3, orientation = TRUE, arrow.length = 500, arrow.distance = 300, arrow.North.size = 6, arrow.color = "black", box = TRUE, box.line.color = "black", box.fill.color = "white", box.offset = 1){
+#   if (box){# Add a background box for better visualization on top of a base map
+#     topLeft <- gcDestination(lon = lon, lat = lat, bearing = 0, dist = distanceLat, dist.units = dist.unit, model = "WGS84")
+#     bottomRight <- gcDestination(lon = lon, lat = lat, bearing = 90, dist = distanceLon*2, dist.units = dist.unit, model = "WGS84")
+
+#     boxTopLeft <- gcDestination(lon = topLeft[1,"long"], lat = topLeft[1,"lat"], bearing = 315, dist = box.offset, dist.units = dist.unit, model = "WGS84")
+#     boxTopRight <- gcDestination(lon = bottomRight[1,"long"], lat = topLeft[1,"lat"], bearing = 45, dist = box.offset, dist.units = dist.unit, model = "WGS84")
+#     boxBottomRight <- gcDestination(lon = bottomRight[1,"long"], lat = bottomRight[1,"lat"], bearing = 135, dist = box.offset, dist.units = dist.unit, model = "WGS84")
+#     boxBottomLeft <- gcDestination(lon = topLeft[1,"long"], lat = bottomRight[1,"lat"], bearing = 225, dist = box.offset, dist.units = dist.unit, model = "WGS84")
+#     bg <- cbind(lon = c(boxTopLeft[1,"long"], boxTopRight[1,"long"], boxBottomRight[1,"long"], boxBottomLeft[1,"long"], boxTopLeft[1,"long"]),
+#                 lat = c(boxTopLeft[1, "lat"], boxTopRight[1, "lat"], boxBottomRight[1, "lat"], boxBottomLeft[1, "lat"], boxTopLeft[1, "lat"]))
+#     bgdf <- data.frame(bg, stringsAsFactors = FALSE)
+#     bg <- geom_polygon(data = bgdf, aes(x = lon, y = lat), fill = box.fill.color, colour = box.line.color, size = 0.2)
+#     res <- c(res, bg)
+#   }
+
+#   laScaleBar <- createScaleBar(lon = lon, lat = lat, distanceLon = distanceLon, distanceLat = distanceLat, distanceLegend = distanceLegend, dist.unit = dist.unit)
+#   # First rectangle
+#   rectangle1 <- geom_polygon(data = laScaleBar$rectangle, aes(x = lon, y = lat), fill = rec.fill, colour = rec.colour)
+
+#   # Second rectangle
+#   rectangle2 <- geom_polygon(data = laScaleBar$rectangle2, aes(x = lon, y = lat), fill = rec2.fill, colour = rec2.colour)
+
+#   # Legend
+#   scaleBarLegend <- annotate("text", label = paste(laScaleBar$legend[,"text"], dist.unit, sep=""), x = laScaleBar$legend[,"long"], y = laScaleBar$legend[,"lat"], size = legend.size, colour = legend.colour)
+
+#   res <- c(res, list(rectangle1, rectangle2, scaleBarLegend))
+
+#   if(orientation){# Add an arrow pointing North
+#     coordsArrow <- createOrientationArrow(scaleBar = laScaleBar, length = arrow.length, distance = arrow.distance, dist.unit = dist.unit)
+#     arrow <- list(geom_segment(data = coordsArrow$res, aes(x = x, y = y, xend = xend, yend = yend), color = arrow.color), annotate("text", label = "N", x = coordsArrow$coordsN[1,"x"], y = coordsArrow$coordsN[1,"y"], size = arrow.North.size, colour = arrow.color))
+#     res <- c(res, arrow)
+#   }
+
+#   return(res)
+# }
+# ###############################################################
+# ###############################################################
+
+
 
 #plot, boxplot and histogram of the parameters alpha eta, for FSBOA and FSCALIB
 plot_a_e <- function(data,param,sta,window,start.date,end.date,names.experts){
@@ -171,6 +317,103 @@ boxplot_parameters <-function(data_param,param,window,ech){
 
 #plot des obs, des previsions des experts et de l'agregation en fonction du temps/des itérations de l'agregation
 #pour une fenêtre glissante une echeance et une station
+# plot_obs_pred_window <-function(X,pred.agreg,Y,date.valid,window,sta,ech,agreg){
+#   X=as.data.frame(X)
+#   liste_expert=names(X)
+#   pred.agreg=as.data.frame(pred.agreg)
+#   df<-cbind(date.valid,pred.agreg,Y,X)
+#   if(length(which(substr(df$date.valid,1,10)==plot.periode[1]))==0 || length(which(substr(df$date.valid,1,10)==plot.periode[2]))==0)stop("plot period not in the data")
+#   df=df[which(substr(df$date.valid,1,10)==plot.periode[1]):which(substr(df$date.valid,1,10)==plot.periode[2]),] #we only keep the data between plot.periode[1] and plot.periode[2]
+#   names(df)[names(df) == "Y"] <- "obs"
+#   names(df)[names(df) == "pred.agreg" | names(df) == "V1"] <- agreg #V1 for bestConvex which has no name i don't know why
+#   df$date.valid=as.POSIXct(df$date.valid)
+#   df$date.valid=as.Date(df$date.valid) #type date from lubridate
+#   datebreaks <- seq(df$date.valid[1], df$date.valid[length(df$date.valid)], by="1 month")
+
+#   df<-df %>%
+#       dplyr::select(date.valid, c(all_of(liste_expert),all_of(agreg),obs)) %>%
+#       gather(key="modele", value="temperature",-date.valid)
+
+#   df <- transform(df, modele=factor(modele, levels=unique(modele))) #without this, ggplot don't plot the lines in the expected order (the order of the dataframe's columns)
+#   #liste de couleur pour les experts
+#   # Dynamically generate default color values
+#   #color.values = hue_pal()(length(liste_expert))
+#   color.values = c("springgreen2","springgreen4","gold2","goldenrod4","hotpink","deeppink","blue","deepskyblue","orange","brown","red","purple")
+#   color.values=color.values[1:length(liste_expert)]
+#   names(color.values) = liste_expert
+#   s.colors=eval(parse(text=paste('c(obs="black",',agreg,'="yellow")',sep=""))) #special colors for the observations and the agregation
+#   color.values = c(color.values, s.colors)
+#   width.values=rep(2,length(liste_expert))
+#   names(width.values)=c(liste_expert)
+#   s.width=eval(parse(text=paste('c(obs=4,',agreg,'=4)',sep=""))) #special width for the observations and the agregation
+#   width.values=c(width.values,s.width)
+#   line.type.values=c("dashed","solid","dashed","solid","dashed","solid","dashed","dashed","dashed","dashed","dashed") # dashed for raw outputs and solid for postprocessed outputs
+#   line.type.values=line.type.values[1:length(liste_expert)]
+#   names(line.type.values) = liste_expert
+#   s.type.values=eval(parse(text=paste('c(obs="solid",',agreg,'="solid")',sep=""))) #solid lines for the observations and the agregation, dashed lines for the others
+#   line.type.values=c(line.type.values,s.type.values)
+#   #shape.values=c(1:14)
+
+
+#   plot.df<-ggplot(df, aes(x=date.valid, y=temperature))+
+#           #theme_gray() +
+#           theme_bw() + #theme, arriere plan... !!!!! le mettre au début, sinon ça peut ecraser le reste !!!!!!!!!!!
+#           geom_line(aes(color = modele, size = modele ,linetype=modele)) + #to have the lines
+#           geom_point(aes(color = modele, size = modele ,linetype=modele),show.legend = FALSE) + #to have the points/shapes
+#           scale_linetype_manual(values=line.type.values) + #solid or dashed lines, and no legend
+#           #scale_shape_manual(values = shape.values) + #type of shape for the points
+#           scale_colour_manual(values=color.values) + #colours
+#           scale_size_manual(values = width.values) + #sizes
+#           scale_x_date(breaks=datebreaks,labels=date_format("%b")) + #x axes with datebreaks
+#           labs(x="Date", y= "Temperature (°C)", title="Temperature forecasts, lead time 48h, and observations") + #title, x and y axes description
+#           theme(plot.title = element_text(colour="black", size=30,face="bold"), axis.title.x = element_text(colour="black",size=30,face="bold"),
+#             axis.title.y = element_text(colour="black",size=30,face="bold"),legend.text=element_text(size=30))
+
+#   ggsave(file=paste(dir_plot,dir_obs_pred,"obs_pred_",agreg,"_window",window,"_",ech,"_",sta,"_",plot.periode[1],"_",plot.periode[2],".pdf",sep=""), width=12, height=7, dpi=600)
+#   print(paste(dir_plot,dir_obs_pred,"obs_pred_",agreg,"_window",window,"_",ech,"_",sta,"_",plot.periode[1],"_",plot.periode[2],".pdf has been created",sep=""))
+
+#   #we derive the error of the modeles
+#   df[which(df$modele!="obs"),]$temperature=abs(df[which(df$modele!="obs"),]$temperature-df[which(df$modele=="obs"),]$temperature)
+#   plot.experts<-ggplot(df[which(df$modele!="obs"),], aes(x=date.valid, y=temperature))+
+#           theme_bw() + #theme, arriere plan... !!!!! le mettre au début, sinon ça peut ecraser le reste !!!!!!!!!!!
+#           geom_line(aes(color = modele, size = modele ,linetype=modele)) + #to have the lines
+#           geom_point(aes(shape = modele, color = modele, size = modele ,linetype=modele)) + #to have the points/shapes
+#           scale_linetype_manual(values=line.type.values) + #solid or dashed lines, and no legend
+#           #scale_shape_manual(values = shape.values) + #type of shape for the points
+#           scale_colour_manual(values=color.values) + #colours
+#           scale_size_manual(values = width.values) + #sizes
+#           scale_x_date(breaks=datebreaks,labels=date_format("%b")) + #x axes with datebreaks
+#           labs(x="Date", y= "Absolute error (°C)",title="Absolute error of the temperature forecast, Chamonix, lead time 48h") + #title, x and y axes description
+#           theme(plot.title = element_text(colour="black", size=23,face="bold"), axis.title.x = element_text(colour="black",size=20,face="bold"),
+#             axis.title.y = element_text(colour="black",size=20,face="bold"),legend.text=element_text(size=20))
+
+#   plot.obs<-ggplot(df[which(df$modele=="obs"),], aes(x=date.valid, y=temperature))+
+#           theme_bw() + #theme, arriere plan... !!!!! le mettre au début, sinon ça peut ecraser le reste !!!!!!!!!!!
+#           geom_line(aes(color = modele, size = modele ,linetype=modele)) +
+#           geom_point(aes(shape = modele, color = modele, size = modele ,linetype=modele)) +
+#           scale_linetype_manual(values=line.type.values) +
+#           #scale_shape_manual(values = shape.values) +
+#           scale_colour_manual(values=color.values) +
+#           scale_size_manual(values = width.values) +
+#           scale_x_date(breaks=datebreaks,labels=date_format("%b")) +
+#           labs(x="Date", y= "Temperature (°C)") +
+#           theme(plot.title = element_text(colour="black", size=20,face="bold"), axis.title.x = element_text(colour="black",size=17,face="bold"),
+#             axis.title.y = element_text(colour="black",size=17,face="bold"),legend.text=element_text(size=17))
+
+#   #we put the two plots together
+#   plot.df <- ggarrange(plot.experts, plot.obs,
+#                     labels = c("Absolute temperature error of the experts and the agregation  (°C)", "Observations  (°C)"),
+#                     label.x=0,
+#                     ncol = 1, nrow = 2,
+#                     common.legend = TRUE, legend="right",
+#                     heights=c(2,1)) #different plot heights
+
+#   ggsave(file=paste(dir_plot,dir_obs_pred,"obs_err_pred_",agreg,"_window",window,"_",ech,"_",sta,"_",plot.periode[1],"_",plot.periode[2],".pdf",sep=""), width=15, height=5, dpi=600)
+#   print(paste(dir_plot,dir_obs_pred,"obs_err_pred_",agreg,"_window",window,"_",ech,"_",sta,"_",plot.periode[1],"_",plot.periode[2],".pdf has been created",sep=""))
+# }
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#idem mais pour le papier !!!!!!!!!!!!!!!!!!
+#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 plot_obs_pred_window <-function(X,pred.agreg,Y,date.valid,window,sta,ech,agreg){
   X=as.data.frame(X)
   liste_expert=names(X)
@@ -190,9 +433,9 @@ plot_obs_pred_window <-function(X,pred.agreg,Y,date.valid,window,sta,ech,agreg){
   liste_expert[liste_expert == "raw.cep" ] <- "raw.ifs"
   df$date.valid=as.POSIXct(df$date.valid)
   df$date.valid=as.Date(df$date.valid) #type date from lubridate
-  datebreaks <- seq(df$date.valid[1], df$date.valid[length(df$date.valid)], by="1 month")# by "1 month" or by "1 day"
+  datebreaks <- seq(df$date.valid[1], df$date.valid[length(df$date.valid)], by="1 day")# by "1 month" or by "1 day"
   df<-df %>%
-      dplyr::select(date.valid, c(all_of(liste_expert),obs)) %>%#,all_of(agreg)
+      dplyr::select(date.valid, c(all_of(liste_expert),all_of(agreg),obs)) %>%#,all_of(agreg)
       gather(key="modele", value="temperature",-date.valid)
 
   df <- transform(df, modele=factor(modele, levels=unique(modele))) #without this, ggplot don't plot the lines in the expected order (the order of the dataframe's columns)
@@ -226,8 +469,9 @@ plot_obs_pred_window <-function(X,pred.agreg,Y,date.valid,window,sta,ech,agreg){
           #scale_shape_manual(values = shape.values) + #type of shape for the points
           scale_colour_manual(values=color.values) + #colours
           scale_size_manual(values = width.values) + #sizes
-          scale_x_date(breaks=datebreaks,labels=date_format("%b")) + #x axes with datebreaks, %d for days number, %b for month
-          labs(x="Month (of the winter 2021-2022)", y= "Temperature (°C)") + #title, x and y axes description
+          scale_x_date(breaks=datebreaks,labels=date_format("%d")) + #x axes with datebreaks, %d for days number, %b for month
+          # scale_y_continuous(limits = c(-20, 10))+ # pour comparer avec et sans biased à chamonix sur le meme axe y
+          labs(x="Date (December 2021)", y= "Temperature (°C)") + #title, x and y axes description
           theme(plot.title = element_text(colour="black", size=25), axis.title.x = element_text(colour="black",size=25),
             axis.title.y = element_text(colour="black",size=25),legend.text=element_text(size=25),
             axis.text.x = element_text(colour="black",size = 25),axis.text.y = element_text(colour="black",size = 25)) +
@@ -235,6 +479,7 @@ plot_obs_pred_window <-function(X,pred.agreg,Y,date.valid,window,sta,ech,agreg){
 
   ggsave(file=paste(dir_plot,dir_obs_pred,"obs_pred_",agreg,"_window",window,"_",ech,"_",sta,"_",plot.periode[1],"_",plot.periode[2],".pdf",sep=""), width=18, height=7, dpi=600)
   print(paste(dir_plot,dir_obs_pred,"obs_pred_",agreg,"_window",window,"_",ech,"_",sta,"_",plot.periode[1],"_",plot.periode[2],".pdf has been created",sep=""))
+
 
   #we derive the error of the modeles
   df[which(df$modele!="obs"),]$temperature=abs(df[which(df$modele!="obs"),]$temperature-df[which(df$modele=="obs"),]$temperature)
