@@ -8,7 +8,6 @@ BOA <- function(y, experts, awake = NULL, loss.type = "square", loss.gradient = 
   N <- ncol(experts)
   T <- nrow(experts)
 
-  eV=eValue(N=N)
   threshold=0.5 # to wake up the experts
   xgboost_threshold=0.5
   transObject_threshold=probTransition(names.experts=names.experts,predType="predErr",nTrain=365*3*18*33*5,
@@ -89,7 +88,6 @@ BOA <- function(y, experts, awake = NULL, loss.type = "square", loss.gradient = 
       ref_w <- truncate1(exp(log(training$ref_eta)+log(ref_w0) + training$ref_eta * ref_R.reg))
       ref_eta[1, ] <- training$ref_eta
       ref_V <- training$ref_V
-      eV <- training$eV
       transObject_threshold <- training$transObject_threshold
       liste_kf <- training$liste_kf
       last_l <- training$last_l
@@ -170,7 +168,7 @@ BOA <- function(y, experts, awake = NULL, loss.type = "square", loss.gradient = 
   dataFirstLeadTime = getFirstLeadTime(sta, res, date.valid, ech = 3)
   gradDepth = transObject_threshold$gradDepth
   newDataThreshold = arrangeData(experts_for_xgboost[t,], idx.na, pred = ref_experts[t, ] %*% ref_p, transObject_threshold$training_data,
-      gradDepth, eV, liste_kf_pred_sd, liste_kf_pred_mean,
+      gradDepth, liste_kf_pred_sd, liste_kf_pred_mean,
       dataFirstLeadTime, beta, runVar)
   shapleyValues = predict(transObject_threshold, newDataThreshold)
   predErr = sum(shapleyValues)
@@ -180,7 +178,7 @@ BOA <- function(y, experts, awake = NULL, loss.type = "square", loss.gradient = 
 
   if (abs(predErr)>=threshold) {#transition probabilities update
       if (predErr>0) { #sum(is_na_spe[t,c("Q10","Q30")])!=2 si au moins un des deux quantilles n'est pas na
-          print("on reveille les experts endormis froid")
+          print("cold experts are awake")
           print(sta)
           print(iteration)
           s1=asleep1 #if specialized expert is not missing
@@ -194,7 +192,7 @@ BOA <- function(y, experts, awake = NULL, loss.type = "square", loss.gradient = 
           if(length(which(colnames(awake)=="Q70"))>0) awake[t,"Q70"]=0
           if(length(which(colnames(awake)=="Q90"))>0) awake[t,"Q90"]=0
       }else if (predErr<0) {#sum(is_na_spe[t,c("Q10","Q30")])!=2 at least one of the quantiles is not NA
-          print("on reveille les experts endormis chaud")
+          print("hot experts are awake")
           print(sta)
           print(iteration)
           s1=asleep2 #if specialized expert is not missing
@@ -301,10 +299,6 @@ BOA <- function(y, experts, awake = NULL, loss.type = "square", loss.gradient = 
     d=ncol(X[[iexp]])
     liste_kf[[iexp]]=statespace(X[[iexp]],Y,kalman_params = list(theta=matrix(1,d,1),P=diag(d),Q=diag(d),sig=1),online=TRUE) #kalman filter update with the new observation
   }
-  eV = eUpdate(eV, lexp = lossPred(experts[t, ], y[t],
-      pred[t], loss.type, loss.gradient = FALSE), lpred = lossPred(pred[t],
-      y[t], pred[t], loss.type, loss.gradient = FALSE),
-      newexperts = experts, newy = y[t], idx.na = idx.na)
 
   transObject_threshold = update(transObject=transObject_threshold,
       new_training_data=newDataThreshold, loss = (ref_pred - y[t]), threshold=xgboost_threshold)
@@ -328,7 +322,7 @@ BOA <- function(y, experts, awake = NULL, loss.type = "square", loss.gradient = 
       R.reg = R.reg, V = V, r.reg = rbind(training$r.reg, r.reg),
       experts = rbind(training$experts, experts), y = c(training$y,
           y), prediction = c(training$prediction, prediction),
-      r = rbind(training$r, r), eV = eV, transObject_threshold = transObject_threshold,
+      r = rbind(training$r, r), transObject_threshold = transObject_threshold,
       sta = sta, ech = ech, window = window,
       awake_transition = awake_transition, liste_kf = liste_kf,
       last_l = lexp, X = X, Y = Y, lnSpread = lnSpread, A1 = A1,
@@ -357,7 +351,6 @@ totoBOA <- function(y, experts, awake = NULL, loss.type = "square", loss.gradien
   N <- ncol(experts)
   T <- nrow(experts)
 
-  eV=eValue(N=N)
   threshold=0.5 # to wake up the experts
   xgboost_threshold=0.5
   transObject_threshold=probTransition(names.experts=names.experts,predType="predErr",nTrain=365*3*18*33*5,
@@ -438,7 +431,6 @@ totoBOA <- function(y, experts, awake = NULL, loss.type = "square", loss.gradien
       ref_w <- truncate1(exp(log(training$ref_eta)+log(ref_w0) + training$ref_eta * ref_R.reg))
       ref_eta[1, ] <- training$ref_eta
       ref_V <- training$ref_V
-      eV <- training$eV
       transObject_threshold <- training$transObject_threshold
       liste_kf <- training$liste_kf
       last_l <- training$last_l
@@ -495,7 +487,7 @@ totoBOA <- function(y, experts, awake = NULL, loss.type = "square", loss.gradien
 
   if (abs(predErr)>=threshold) {#transition probabilities update
       if (predErr>0) { #sum(is_na_spe[t,c("Q10","Q30")])!=2 si au moins un des deux quantilles n'est pas na
-          print("on reveille les experts endormis froid")
+          print("cold experts are woken up")
           print(sta)
           print(iteration)
           s1=asleep1 #if specialized expert is not missing
@@ -509,7 +501,7 @@ totoBOA <- function(y, experts, awake = NULL, loss.type = "square", loss.gradien
           if(length(which(colnames(awake)=="Q70"))>0) awake[t,"Q70"]=0
           if(length(which(colnames(awake)=="Q90"))>0) awake[t,"Q90"]=0
       }else if (predErr<0) {#sum(is_na_spe[t,c("Q10","Q30")])!=2 at least one quantile is not NA
-          print("on reveille les experts endormis chaud")
+          print("hot experts are woken up")
           print(sta)
           print(iteration)
           s1=asleep2 #if specialized expert is not missing
@@ -676,7 +668,7 @@ totoBOA <- function(y, experts, awake = NULL, loss.type = "square", loss.gradien
       R.reg = R.reg, V = V, r.reg = rbind(training$r.reg, r.reg),
       experts = rbind(training$experts, experts), y = c(training$y,
           y), prediction = c(training$prediction, prediction),
-      r = rbind(training$r, r), eV = eV, transObject_threshold = transObject_threshold,
+      r = rbind(training$r, r), transObject_threshold = transObject_threshold,
       sta = sta, ech = ech, window = window,
       awake_transition = awake_transition, liste_kf = liste_kf,
       last_l = lexp, X = X, Y = Y, lnSpread = lnSpread, A1 = A1,

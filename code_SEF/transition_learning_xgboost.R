@@ -352,8 +352,8 @@ which_orderExp <-function(lexp,names.experts){
 #experts : prediction of the experts
 #pred : prediction of the aggregation for the prediction ; for the learning prediction whith the updated weights  
 #oldData : data of the previous iteration
-arrangeData <- function(experts,idx.na=NULL,pred=NULL,oldData=NULL,gradDepth=1,eV=NULL,liste_kf_pred_sd=NULL,liste_kf_pred_mean=NULL,
-                        dataFirstLeadTime=NULL,beta=NULL,runVar=NULL) {#,eV=NULL) {
+arrangeData <- function(experts,idx.na=NULL,pred=NULL,oldData=NULL,gradDepth=1,liste_kf_pred_sd=NULL,liste_kf_pred_mean=NULL,
+                        dataFirstLeadTime=NULL,beta=NULL,runVar=NULL) {
     if (!is.null(idx.na)) { experts[idx.na]=NA
     } else warning("WARNING: you didn't specify if they are missing experts => the missing experts are put to zero by opera...!!!")
     names.experts=names(experts)
@@ -446,36 +446,6 @@ arrangeData <- function(experts,idx.na=NULL,pred=NULL,oldData=NULL,gradDepth=1,e
         newData=cbind(newData,kf_sd)
     }
 
-    # if (!is.null(eV)){
-    #     nbcol=length(newData)
-    #     lastIt=dim(eV$M)[3]
-    #     if(eV$grad) {
-    #         newData=cbind(newData,t(eV$gradM[2,-c(2),lastIt])) #Ev expert 2 vs j, and remove the eV comparing expert 1 to himself
-    #         names(newData)[(nbcol+1):(nbcol+nexp-1)]<-paste("grad.eV_",2,"_",2:nexp,sep="")
-    #         # nbcol=length(newData)
-    #         # newData=cbind(newData,t(eV$gradM[4,-c(4),lastIt])) #Ev expert 4 vs j, and remove the eV comparing expert 1 to himself
-    #         # names(newData)[(nbcol+1):(nbcol+nexp-1)]<-paste("grad.eV_",4,"_",2:nexp,sep="")
-    #         # nbcol=length(newData)
-    #         # newData=cbind(newData,t(eV$gradM[6,-c(6),lastIt])) #Ev expert 6 vs j, and remove the eV comparing expert 1 to himself
-    #         # names(newData)[(nbcol+1):(nbcol+nexp-1)]<-paste("grad.eV_",6,"_",2:nexp,sep="")
-    #         # nbcol=length(newData)
-    #         # newData=cbind(newData,t(eV$gradM[9,-c(9),lastIt])) #Ev expert 11 vs j, and remove the eV comparing expert 1 to himself
-    #         # names(newData)[(nbcol+1):(nbcol+nexp-1)]<-paste("grad.eV_",9,"_",2:nexp,sep="")
-    #     } else {
-    #         newData=cbind(newData,t(eV$M[1,2:nexp,lastIt])) #Ev expert 1 vs j, and remove the eV comparing expert 1 to himself
-    #         names(newData)[(nbcol+1):(nbcol+nexp-1)]<-paste("eV_",1,"_",2:nexp,sep="")
-    #     }
-    # }
-
-    #newData=addGrad(oldData,newData,gradDepth)
-
-    # if (!is.null(beta)) {
-    #     newData=cbind(newData,beta)
-    #     names(newData)[length(newData)]="beta"
-    #     newData=cbind(newData, SD_T - beta)
-    #     names(newData)[length(newData)]="diff_SD"
-    # }
-
     if (!is.null(runVar)) {
         newData=cbind(newData,runVar$runMeanVar) #mean variance during the run
         names(newData)[length(newData)]="runMeanVar"
@@ -508,7 +478,7 @@ recupLeadTimes <- function(ech,sta,res,iteration,names.experts,dataFirstLeadTime
 
     for (iech in iechMax){ #to take the previous lead times into account
     #for (iech in iechMax){
-        file_name=dir(path = dir_data_with, pattern = paste("donnee_",parametre,"_",res,"_",liste_ech_xgboost[iech],"_",sta,sep=""),full.names=TRUE)
+        file_name=dir(path = dir_data, pattern = paste("donnee_",parametre,"_",res,"_",liste_ech_xgboost[iech],"_",sta,sep=""),full.names=TRUE)
         #il y a un ou des espaces avant les NA..., d'ou "  NA"
         donnee = read.table(file_name,head=T,sep=";",na.strings=c("       NA","      NA","     NA","    NA","   NA","  NA"," NA","NA"))
         iRowOld=nrow(oldData)-iech+1 #correspondinf lead time of the previous iteration
@@ -648,7 +618,7 @@ dist_pred_train <- function(training_data,newData,normType) {
 
 #get the predictions of the lead time ech and the corresponding observation
 getFirstLeadTime <- function(sta,res,date.valid,ech) {
-    file_name=dir(path = dir_data_with, pattern = paste("donnee_t_",res,"_",ech,"_",sta,sep=""),full.names=TRUE)
+    file_name=dir(path = dir_data, pattern = paste("donnee_t_",res,"_",ech,"_",sta,sep=""),full.names=TRUE)
     #il y a un ou des espaces avant les NA..., d'ou "  NA"
     data = read.table(file_name,head=T,sep=";",na.strings=c("       NA","      NA","     NA","    NA","   NA","  NA"," NA","NA"))
     dateObs=which(substr(data$valid,1,10)==substr(date.valid,1,10))
@@ -663,7 +633,7 @@ computeRunVar <- function(sta,res,iteration,names.experts){
     varT=c()
     listeEch=c("3","6","9","12","15","18","21","24","27","30","33","36","39","42","45","48","57","72","84") #TODO pas beau en dur
     for (ech in listeEch) {
-        file_name=dir(path = dir_data_with, pattern = paste("donnee_t_",res,"_",ech,"_",sta,sep=""),full.names=TRUE)
+        file_name=dir(path = dir_data, pattern = paste("donnee_t_",res,"_",ech,"_",sta,sep=""),full.names=TRUE)
         #il y a un ou des espaces avant les NA..., d'ou "  NA"
         data = read.table(file_name,head=T,sep=";",na.strings=c("       NA","      NA","     NA","    NA","   NA","  NA"," NA","NA"))
         varT = c(varT,apply(data[iteration,names(data) %in% c(names.experts)],1,var,na.rm=T))

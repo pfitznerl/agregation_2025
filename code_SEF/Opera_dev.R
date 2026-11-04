@@ -11,477 +11,36 @@ blockToSeries <- function(X){
   }
 }
 
-
-
-
-SOCOBOA <- function(y, experts, awake = NULL, loss.type = "square", loss.gradient = TRUE, 
-                w0 = NULL, training = NULL) {
-  experts <- as.matrix(experts)
-  N <- ncol(experts)
-  T <- nrow(experts)
-
-  # Uniform initial weight vector if unspecified
-  if (is.null(w0)) {
-    w0 <- rep(1, N)
-  }
-
-  awake <- as.matrix(awake)
-  idx.na <- which(is.na(experts))
-  awake[idx.na] <- 0
-  experts[idx.na] <- 0
-
-  if (length(which(is.na(y)))>0){ #to deal with missing observations =>no loss for every expert
-    y[which(is.na(y))]<- 0
-    awake[idx.na] <- 1 #to avoid 0 division
-    experts[idx.na] <- 0
-  }
-  
-  R <- rep(0, N)
-  R.reg <- R
-  weights <- matrix(0, ncol = N, nrow = T)
-  prediction <- rep(0, T)
-  w <- w0
-  eta <- matrix(exp(350), ncol = N, nrow = T + 1)
-  V <- 0
-  B <- 0
-
-  if (!is.null(training)) {
-    w0 <- training$w0
-    R <- training$R
-    R.reg <- training$R.reg
-    w <- truncate1(training$eta*exp(log(w0) + training$eta * R.reg))
-    eta[1, ] <- training$eta
-    B <- training$B
-    V <- training$V
-  }
-
-  for (t in 1:T) {
-    p <- awake[t, ] * w/sum(awake[t, ] * w)
-    pred <- experts[t, ] %*% p
-    
-    
-    weights[t, ] <- p
-    prediction[t] <- pred
-
-    #loss of the prediction
-    lpred <- lossPred(pred, y[t], pred, loss.type = loss.type, loss.gradient = loss.gradient)
-    #vector, losses for each of the M experts
-    lexp <- lossPred(experts[t, ], y[t], pred, loss.type = loss.type, loss.gradient = loss.gradient)
-
-    # Vector, instantaneous regret
-    r <-  awake[t, ] * (lpred - lexp) # -(l_{t} - sum_{i}(w_{t}.l_{t}) in SOCO wintenberger
-
-    # Update the learning rates
-    eta_inv_2 = 1/(eta[t, ]*eta[t, ]) + r^2 / log(1/w0)
-    eta[t + 1, ] <- pmin(sqrt(1/eta_inv_2),exp(350)) #vector, learning rate for the M experts
-
-    r.reg <- r - eta[t+1, ] * r^2
-    
-    # Update the regret and the regularized regret used by BOA
-    R <- R + r
-    R.reg <- R.reg + r.reg
-    
-    w <- truncate1(eta[t + 1, ]*exp(log(w0) + eta[t + 1, ] * R.reg))
-    
-  }
-  
-  object <- list(model = "SOCOBOA", loss.type = loss.type, loss.gradient = loss.gradient, 
-                 coefficients = w/sum(w))
-  
-  object$parameters <- list(eta = eta[1:T, ])
-  object$weights <- weights
-  object$prediction <- prediction
-  
-  object$training <- list(eta = eta[T + 1, ], R = R, w0 = w0, R.reg = R.reg, V= V, B=B, r.reg=rbind(training$r.reg,r.reg),r=rbind(training$r,r))
-  class(object) <- "mixture"
-  return(object)
-} 
-
-
-
-
-
-
-
-
-#fixedshare calib with theta computed by rf
-totofixedshareCalib <- function(y, experts, grid.eta = 1, grid.alpha = 10^(-4:-1), awake = NULL, 
-  loss.type = "square", loss.gradient = TRUE, w0 = NULL, trace = F, gamma = 2, 
-  training = NULL) {
-  experts <- as.matrix(experts)
-  names.experts=colnames(experts)
-
-  grid.alpha=1
-  threshold=2
-  nTrain=365*3
-  transObject_exp=probTransition(names.experts=names.experts,predType="loss",nTrain=nTrain*16,threshold=threshold) #probTransition object for the prediction of the expert losses
-  transObject_threshold=probTransition(names.experts=names.experts,predType="predErr",nTrain=1069,threshold=threshold) #probTransition object to predict if the agregation will have a loss bigger than a threshold
-
-  N <- ncol(experts)  # Number of experts
-  T <- nrow(experts)  # Number of instants
-  
-  # Uniform initial weight vector if unspecified
-  if (is.null(w0)) {
-    w0 <- rep(1, N)
-  }
-  
-  if (is.null(gamma)) {
-    gamma <- 2
-  }
-  
-  awake <- as.matrix(awake)
-  idx.na <- which(is.na(experts))
-  awake[idx.na] <- 0
-  experts[idx.na] <- 0
-
-  if (length(which(is.na(y)))>0){ #to deal with missing observations =>no loss for every expert
-    y[which(is.na(y))]<- 0
-    awake[idx.na] <- 1 #to avoid 0 division
-    experts[idx.na] <- 0
-  }
-  
-  T0 <- 0  # number of observations in previous runs
-  neta <- length(grid.eta)  # Number of learning rates in the grid
-  nalpha <- length(grid.alpha)  # Number of mixing rates in the grid
-  bestpar <- c(floor(neta)/2, floor(nalpha)/2) + 1  # We start with the parameters in the middle of the grids
-  par <- NULL
-  
-  cumulativeLoss <- array(0, dim = c(neta, nalpha))
-  iLoss <- array(0, dim = c(neta, nalpha))
-
-  
-  wpar <- array(w0, dim = c(N, neta, nalpha))  # Weight array (in 3 dimensions) assigned by each algorithm FixedShare(eta,alpha)
-  weights <- matrix(0, ncol = N, nrow = T)  # Matrix of weights formed by the mixture
-  prediction <- rep(0, T)  # Predictions formed by the mixture
-  
-  #$$if (!is.null(training)) {
-  if (!is.null(training$R)) {
-    bestpar <- training$bestpar
-    wpar <- training$wpar[[length(training$wpar)]]
-    w0 <- training$w0
-    R <- training$R
-    cumulativeLoss <- training$cumulativeLoss[[length(training$cumulativeLoss)]]
-    T0 <- training$T
-    transObject_exp <- training$transObject_exp
-    transObject_threshold <- training$transObject_threshold
-  }
-  sta<-training$sta#$$
-  ech<-training$ech#$$
-  window<-training$window#$$
-  iteration<-training$iteration#$$
-
-  for (t in 1:T) {
-    # Display the state of progress of the algorithm
-    if (!(t%%floor(T/10)) && trace) 
-      cat(floor(10 * t/T) * 10, "% -- ")
-
-    # Weights, prediction forme by FixedShare(eta[t],alpha[t]) where par[t,] =
-    # c(eta[t],alpha[t]) are the parameters calibrated online
-    weights[t, ] <- wpar[, bestpar[1], bestpar[2]] * awake[t, ]/sum(wpar[, bestpar[1], 
-      bestpar[2]] * awake[t, ])
-
-
-    newDataThreshold=arrangeData(experts[t, ],pred=experts[t, ]%*%weights[t, ],transObject_threshold$training_data)
-    newDataExp=arrangeData(experts[t, ],pred=experts[t, ]%*%weights[t, ],transObject_exp$training_data)
-    if (abs(predict(transObject_threshold,newDataThreshold))>=threshold) {#transition probabilities update
-      theta=predict(transObject_exp,newDataExp,weights=weights)
-      weights[t, ] <- theta%*%weights[t, ] #share update
+#function to remove columns of a data frame X with less than percentage% missing values
+rm_missing_col <- function(X,percentage) {
+    rm.col=c()
+    for (ncol in 1:ncol(X)){
+      nna=length(which(X[,ncol]==-100))+length(which(is.na(X[,ncol])))+length(which(X[,ncol]==-999)) #sum of the NA's and -100
+      if (nna>nrow(X)*percentage){rm.col <- c(rm.col,ncol)}
     }
-
-
-
-    prediction[t] <- experts[t, ] %*% weights[t, ]
-    par <- rbind(par, data.frame(eta = grid.eta[bestpar[1]], alpha = grid.alpha[bestpar[2]]))
-    #print(bestpar)
-    #if(T0>609)browser()
-    
-    # Loop over the mixing rates alpha in the grid 'grid.alpha'
-    for (k in 1:nalpha) {
-
-      wpar[, , k]=truncate1(wpar[, , k]) #needed when all the weight is on a missing expert=>the sum of the weights of the awake experts is null
-      waux <- t(t(wpar[, , k] * awake[t, ])/apply(as.matrix(wpar[, , k] * awake[t, 
-        ]), 2, sum))
-      pred <- experts[t, ] %*% waux
-
-
-      iLoss[, k] <- loss(pred, y[t], loss.type)
-      #print(iLoss[,k])
-      cumulativeLoss[, k] <- cumulativeLoss[, k] + iLoss[, k]  # Non gradient cumulative losses
-      if (neta == 1){
-        lpred <- lossPred(pred, y[t], pred, loss.type, loss.gradient)
-      } else {
-        lpred <- diag(lossPred(pred, y[t], pred, loss.type, loss.gradient))  # gradient loss suffered by each eta on the grid
-      }
-      lexp <- lossPred(experts[t, ], y[t], pred, loss.type, loss.gradient)
-stop("!!!!!!!!!!! il faut recoder toute cette fonction... !!!!!!!!!!!")
-      # Regret update
-      #R <- t(t(log(wpar[, , k]))/grid.eta) + awake[t, ] * t(c(lpred) - t(lexp))
-      newData=arrangeData(experts[t, ],pred=experts[t, ]%*%wpar[, , k])
-      if (abs(predict(transObject_threshold,newDataThreshold))>=threshold) {#transition probabilities update
-        theta=predict(transObject_exp,newDataExp,weights=weights)
-        wpar[, , k] <- theta%*%wpar[, , k] #share update
-        wpar[, , k] <- wpar[, , k] /sum(wpar[, , k])
-      }
-
-
-      # # Weight update
-      # v <- truncate1(exp(t(t(matrix(R, ncol = neta)) * grid.eta)))
-      # v <- t(t(v)/apply(v, 2, sum))  # Renormalization of each column
-      # wpar[, , k] <- grid.alpha[k]/N + (1 - grid.alpha[k]) * v
-    }
-
-    # Grid update *************** find the best parameter in the grid
-    bestpar <- which(cumulativeLoss == min(cumulativeLoss), arr.ind = TRUE)[1, 
-      ]
-
-    wt=(wpar[, bestpar[1], bestpar[2]]/sum(wpar[, bestpar[1], bestpar[2]]))
-    names(wt)=names.experts
-    
-    trainDataThreshold=arrangeData(experts[t, ],pred=experts[t, ] %*% wt,transObject_threshold$training_data)
-    trainDataExp=recupLeadTimes(ech,sta,iteration,names.experts,transObject_exp$training_data)
-
-    transObject_exp=update(transObject_exp,trainDataExp,loss=(pred[t]-y[t]))
-    transObject_threshold=update(transObject_threshold,trainDataThreshold,loss=(pred[t]-y[t]))
-  }
-
-  # Next weights
-  w <- wpar[, bestpar[1], bestpar[2]]/sum(wpar[, bestpar[1], bestpar[2]])
-  
-  object <- list(model = "FS", loss.type = loss.type, loss.gradient = loss.gradient, 
-    coefficients = w)
-  
-  object$parameters <- list(eta = par$eta[1:T], alpha = par$alpha[1:T], grid.eta = grid.eta, 
-    grid.alpha = grid.alpha)
-  object$weights <- weights
-  object$prediction <- prediction
-
-  object$training <- list(T = T0 + T, wpar = c(training$wpar,list(wpar)), w0 = w0, R = R,
-    cumulativeLoss = c(training$cumulativeLoss, list(cumulativeLoss)), iLoss = c(training$iLoss,list(iLoss)),
-      bestpar = bestpar, grid.loss = cumulativeLoss/(T0 + T), oldexperts = rbind(training$oldexperts, 
-        experts), oldY = c(training$oldY, y), oldawake = rbind(training$oldawake,awake),transObject_exp=transObject_exp,
-        transObject_threshold=transObject_threshold)
-  
-  rownames(object$training$grid.loss) <- grid.eta
-  colnames(object$training$grid.loss) <- grid.alpha
-  class(object) <- "mixture"
-  
-  if (trace) 
-    cat("\n")
-  return(object)
+    if (!is.null(rm.col)){X<-X[,-rm.col]} #keep only the experts with less than percentage % of missing values
+    return(X)
 }
 
-
-
-
-
-fixedshareSOCOBoa <- function(y, experts, alpha, awake = NULL, loss.type = "square", 
-                       loss.gradient = TRUE, w0 = NULL, training = NULL) {
-  experts <- as.matrix(experts)
-
-  N <- ncol(experts)  # Number of experts
-  T <- nrow(experts)  # Number of instants
-  
-  # Uniform initial weight vector if unspecified
-  if (is.null(w0)) {
-    w0 <- rep(1, N)
-  }
-  
-  wpar <- w0
-  awake <- as.matrix(awake)
-  idx.na <- which(is.na(experts))
-  awake[idx.na] <- 0
-  experts[idx.na] <- 0
-
-  if (length(which(is.na(y)))>0){ #to deal with missing observations =>no loss for every expert
-    y[which(is.na(y))]<- 0
-    awake[idx.na] <- 1 #to avoid 0 division
-    experts[idx.na] <- 0
-  }
-  
-  R <- rep(0, N)
-  pred <- rep(0, T)  # Prediction vector
-  cumulativeLoss <- 0  # Cumulative loss of the mixture
-  weights <- matrix(0, ncol = N, nrow = T)
-  R.reg <- R
-  w <- w0
-  eta <- matrix(exp(350), ncol = N, nrow = T + 1)
-  V <- 0
-  B <- 0
-  
-  if (!is.null(training)) {
-    cumulativeLoss <- training$cumulativeLoss
-    w0 <- training$w0
-    R <- training$R
-    R.reg <- training$R.reg
-    wpar <- training$wpar
-    eta[1, ] <- training$eta
-    B <- training$B
-    V <- training$V
-  }
-  
-  for (t in 1:T) {
-    # Weight update
-    weights[t, ] <- awake[t, ]*wpar/sum(awake[t, ]*wpar)
-    
-    # Prediction and loss
-    pred[t] <- experts[t, ] %*% weights[t, ]
-    iLoss <- loss(pred[t], y[t], loss.type)
-    cumulativeLoss <- cumulativeLoss + iLoss
-    lpred <- lossPred(pred[t], y[t], pred[t], loss.type, loss.gradient)
-    lexp <- lossPred(experts[t, ], y[t], pred[t], loss.type, loss.gradient)
-    
-    # Vector, instantaneous regret
-    r <-  awake[t, ] * (lpred - lexp) # -(l_{t} - sum_{i}(w_{t}.l_{t}) in SOCO wintenberger
-
-    # Update the learning rates
-    eta_inv_2 = 1/(eta[t, ]*eta[t, ]) + r^2 / log(1/w0)
-    eta[t + 1, ] <- pmin(sqrt(1/eta_inv_2),exp(350)) #vector, learning rate for the M experts
-    
-    r.reg <- r - eta[t+1, ] * r^2
-
-    # Update the regret and the regularized regret used by BOA
-    R <- R + r
-    R.reg <- R.reg + r.reg
-
-    v <- truncate1(exp(log(w0*eta[t+1, ]) + eta[t+1, ] * R.reg))/sum(truncate1(exp(log(w0*eta[t+1, ]) + eta[t+1, ] * R.reg))) #dans Herbster and Warmuth 1998, "loss update"
-
-    wpar <- alpha/N + (1 - alpha) * v
-  }
-
-  # Weight update
-  w <- wpar/sum(wpar)
-  
-  object <- list(model = "FSSOCOBOA", loss.type = loss.type, loss.gradient = loss.gradient, 
-                 coefficients = w)
-  
-  object$parameters <- list(eta = eta, alpha = alpha)
-  object$weights <- weights
-  object$prediction <- pred
-
-  object$training <- list(R = R, wpar = wpar, cumulativeLoss = cumulativeLoss, R.reg=R.reg, eta = eta[T + 1, ], w0 = w0, V= V, B=B,
-                          r=rbind(training$r,r), r.reg=rbind(training$r.reg,r.reg),lpred=rbind(training$lpred,lpred), iLoss=c(training$iLoss,iLoss))
-
-  return(object)
+#function to evaluate the quantiles of the absolute error with 5% steps
+eval_quantiles_abs_error <- function(x,y){
+  abs_error=abs(x-y) #absolute error
+  quantile_abs_error=quantile(abs_error, probs = seq(0, 1, 1/20),na.rm=T)
+  return(quantile_abs_error)
 }
 
-
-
-
-ridge <- function(y, experts, lambda, w0 = NULL, training = NULL) {
-  experts <- as.matrix(experts)
-  N <- ncol(experts)
-  T <- nrow(experts)
-  
-  # Uniform initial weight vector if unspecified
-  if (is.null(w0)) {
-    w0 <- matrix(1/N, ncol = N)
-  }
-  if (sum(is.na(experts)) > 0) {
-    warning("There are not allowed NA's in expert advice")
-  }
-  
-  w <- matrix(0, ncol = N, nrow = T)
-  
-  
-  if (!is.null(training)) {
-    At <- training$At
-    bt <- training$bt
-  } else {
-    At <- lambda * diag(1, N)
-    bt <- matrix(lambda * w0, nrow = N)
-  }
-  
-  for (t in 1:T) {
-    w[t, ] <- solve(At, bt)
-    At <- At + experts[t, ] %*% t(experts[t, ])
-    bt <- bt + y[t] * experts[t, ]
-  }
-  # w[1,] = w0
-  
-  object <- list(model = "Ridge", loss.type = list(name = "square"), coefficients = solve(At,bt))
-  
-  object$parameters <- list(lambda = lambda)
-  object$weights <- w
-  object$prediction <- apply(experts * w, 1, sum)
-  
-  object$training <- list(At = At, bt = bt)
-  
-  return(object)
-} 
-
-
-
-
-OGD <- function(y, experts, loss.type = "square", training = NULL, alpha, simplex, w0 = NULL) {
-  
-  experts <- as.matrix(experts)
-  N <- ncol(experts)
-  T <- nrow(experts)
-  
-  # weight assigned to each expert
-  weights <- matrix(0, ncol = N, nrow = T)
-  prediction <- rep(0, T)
-  
-  # Initialization (number of previous instances already trained)
-  t0 <- 0
-  eta <- numeric(T+1)
-  
-  # Initial weights
-  if (is.null(w0)) {
-    w0 <- rep(0, N)
-  }
-  w <- w0
-  if (simplex) {
-    w <- simplexProj(w0)
-  }
-  B <- 0
-  
-  # Previous training ?
-  if (!is.null(training)) {
-    t0 <- training$t0
-    w <- training$w
-    B <- training$B
-  } else {
-    training <- list()
-  }
-  
-  for (t in 1:T) {
-    pred <- experts[t, ] %*% w
-    
-    # save the mixture and the prediction
-    weights[t, ] <- w
-    prediction[t] <- pred
-    
-    # Observe losses
-    lexp <- lossPred(experts[t, ], y[t], pred, loss.type = loss.type, loss.gradient = TRUE)
-    B <- max(B, sqrt(sum(lexp^2)))
-    
-    # Update the learning rate
-    eta[t+1] <-  (t+t0)^(-alpha) / B
-    
-    # Gradient step
-    w <- w - eta[t + 1] * lexp 
-    if (simplex) {
-      w <- simplexProj(w)
-    }
-  }
-
-
-  object <- list(model = "OGD", loss.type = loss.type, loss.gradient = TRUE, 
-                 coefficients = w)
-  
-  object$parameters <- list(alpha = alpha,
-                            simplex = simplex,
-                            w0 = w0)
-  object$weights <- weights
-  object$prediction <- prediction
-  
-  object$training <- list(w = w, t0 = t0 + T, B = B)
-  class(object) <- "mixture"
-  return(object)
+#function to make the uniform agregation
+prevision_UNIFORM <- function(X,Y,T) {
+  # Remplace les NA par la moyenne de leur ligne
+  X_clean <- t(apply(X, 1, function(row) {
+    row_mean <- mean(row, na.rm = TRUE)  # Calcule la moyenne de la ligne (ignore les NA)
+    row[is.na(row)] <- row_mean          # Remplace les NA par la moyenne
+    row
+  }))
+  uniform_pred=apply(X_clean,1,mean)#prediction of the uniform aggregation
+  matrix_weights= matrix(1/ncol(X), nrow = nrow(X), ncol = ncol(X))
+  return(list(predictions=uniform_pred,weights=matrix_weights,mixture=NULL))
 }
-
-
 
 
 
@@ -866,78 +425,6 @@ bestLinear <- function(y, experts, lambda = 0, loss.type = list(name = "square")
 } 
 
 
-# # best sequence of experts oracle
-# bestShifts <- function(y, experts, awake = NULL, loss.type = list(name = "square"), 
-#                        trace = FALSE) {
-#                         browser()
-#   N <- ncol(experts)
-#   T <- nrow(experts)
-#   INF <- exp(700)
-#   # m-1 shifts, expert
-  
-#   # Full activation if unspecified
-#   if (is.null(awake)) {
-#     awake <- matrix(1, nrow = T, ncol = N)
-#   }
-  
-#   awake <- as.matrix(awake)
-#   idx.na <- which(is.na(experts))
-#   awake[idx.na] <- 0
-#   experts[idx.na] <- 0
-
-#   if (length(which(is.na(y)))>0){ #to deal with missing observations =>no loss for every expert
-#     y[which(is.na(y))]<- 0
-#     awake[idx.na] <- 1 #to avoid 0 division
-#     experts[idx.na] <- 0
-#   }
-  
-#   loss.name <- c("square", "absolute", "percentage")
-#   loss.number <- which(loss.name == loss.type$name)
-  
-#   L <- array(INF, dim = c(T, N, 3))
-#   L[1, , ] <- 0
-#   instanceLoss <- array(0, dim = c(N, 3))
-  
-#   for (t in 1:T) {
-#     if (!(t%%100) && trace) {
-#       cat(floor(t^2/T^2 * 10000)/100, "% -- ")
-#       cat("t = ", t - 1, ": average minimal loss with t shifts : ", min(sqrt(L[t - 
-#                                                                                  1, , loss.number]/(t - 1))), " without shifts :", min(sqrt(L[1, , 
-#                                                                                                                                               loss.number]/(t - 1))), "\n")
-#     }
-    
-#     Et1 <- which(awake[t - 1, ] > 0)
-#     Et <- which(awake[t, ] > 0)
-#     for (l in 1:3) {
-#       instanceLoss[, l] <- loss(experts[t, ], y[t], loss.name[l]) * awake[t, 
-#                                                                           ]
-#     }
-#     L[1:t, -Et, ] <- INF
-#     if (t > 1) {
-#       L1 <- L[1:t, Et1, ]
-#       idx_min <- apply(L1[, , loss.number], 1, order)[1:2, ]
-#       for (m in t:2) {
-#         for (i in Et) {
-#           if (idx_min[1, m - 1] == i) 
-#             aux <- idx_min[2, m - 1] else aux <- idx_min[1, m - 1]
-          
-#           if (L[m, i, loss.number] < L1[m - 1, aux, loss.number]) 
-#             L[m, i, ] <- L[m, i, ] + instanceLoss[i, ] else L[m, i, ] <- L1[m - 1, aux, ] + instanceLoss[i, ]
-#         }
-#       }
-#     }
-#     L[1, , ] <- L[1, , ] + instanceLoss
-#   }
-#   loss.experts <- L[, , loss.number]/T
-#   loss <- apply(loss.experts, 1, min) #sequence of instantaneous losses of the oracle with m switches
-#   res <- list(loss = loss)
-#   if (loss.type == "square") {
-#     res <- list(loss = loss, rmse = sqrt(loss))
-#   }
-#   return(res)
-# }
-
-#new version
 #best sequence of experts oracle
 bestShifts <- function(y, experts, awake = NULL, loss.type = list(name = "square")) {
   N <- ncol(experts)
@@ -1256,10 +743,6 @@ predictReal <- function(object, newexperts = NULL, newY = NULL, awake = NULL,
   }
 
   if (!is.null(awake)) {
-    cat("\n$$ nrow newexperts : ",nrow(newexperts))
-    cat("\n$$ nrow awake : ",nrow(awake))
-    cat("\n$$ ncol newexperts : ",ncol(newexperts))
-    cat("\n$$ ncol awake : ",ncol(awake))
     awake <- matrix(awake, nrow = T)
     if (!identical(dim(awake), dim(newexperts))) {
       stop("Bad dimensions: awake and newexperts should have same dimensions")
@@ -1315,7 +798,7 @@ predictReal <- function(object, newexperts = NULL, newY = NULL, awake = NULL,
   }
   
   newexperts <- matrix(as.numeric(as.matrix(newexperts)), nrow = T)
-  colnames(newexperts)<-object$names.experts #$$
+  colnames(newexperts)<-object$names.experts
 
   # Batch prediction and weights
   if (!online) {
@@ -1337,82 +820,19 @@ predictReal <- function(object, newexperts = NULL, newY = NULL, awake = NULL,
       object$coefficients <- object$training$next.weights
     }
     
-    if (object$model == "Ridge") {
-      if (is.null(object$parameters$lambda) || !is.null(object$parameters$grid.lambda)) {
-        newobject <- ridgeCalib(y = newY, experts = newexperts, w0 = object$coefficients, 
-                                gamma = object$parameters$gamma, grid.lambda = object$parameters$grid.lambda, 
-                                training = object$training)
-        newobject$parameters$lambda <- c(object$parameters$lambda, newobject$parameters$lambda)
-      } else {
-        newobject <- ridge(y = newY, experts = newexperts, lambda = object$parameters$lambda, 
-                           w0 = object$coefficients, training = object$training)
-      }
-    }
+
     if (object$model == "MLpol") {
       newobject <- MLpol(y = newY, experts = newexperts, awake = awake, loss.type = object$loss.type, 
                          loss.gradient = object$loss.gradient, training = object$training)
       newobject$parameters <- list(eta = rbind(object$parameters$eta, newobject$parameters$eta))
     }
-
-    #$$
-    if ( (object$model == "MMLpol") ) {
-      # if (is.null(object$parameters$alpha) || !is.null(object$parameters$grid.alpha)) {
-      #   if (is.null(object$parameters$grid.alpha)) {
-      #     object$parameters$grid.alpha <- 10^(-4:-1)
-      #   }
-      #   newobject <- MMLpolCalib(y = newY, experts = newexperts, awake = awake, 
-      #                                loss.type = object$loss.type, loss.gradient = object$loss.gradient, 
-      #                                w0 = object$coefficients, gamma = object$parameters$gamma, 
-      #                                grid.alpha = object$parameters$grid.alpha, training = object$training)
-      #   newobject$parameters$eta <- rbind(object$parameters$eta, newobject$parameters$eta)
-      #   newobject$parameters$alpha <- c(object$parameters$alpha, newobject$parameters$alpha)
-      # } else {
-        newobject <- MMLpol(y = newY, experts = newexperts, 
-                                alpha = object$parameters$alpha, awake = awake, loss.type = object$loss.type, 
-                                loss.gradient = object$loss.gradient, 
-                                training = object$training)
-      #}
-      newobject$parameters <- list(eta = rbind(object$parameters$eta, newobject$parameters$eta))
-    }
-    #$$
-
-    if (object$model == "OGD") {
-      if (is.null(object$parameters$alpha)) {object$parameters$alpha = 0.5}
-      if (is.null(object$parameters$simplex)) {object$parameters$simplex = TRUE}
-      newobject <- OGD(y = newY, experts = newexperts, loss.type = object$loss.type, 
-                       training = object$training, alpha = object$parameters$alpha, simplex = object$parameters$simplex,
-                       w0 = object$coefficients)
-    }
     
-    if ((object$model == "BOA") || (object$model == "SOCOBOA") || (object$model == "MLewa") || (object$model == 
-                                                                 "MLprod")) {
+    if (object$model == "BOA") {
       algo <- eval(parse(text = 'object$model'))
       newobject <- eval(parse(text=paste(algo,"(y = newY, experts = newexperts, awake = awake, loss.type = object$loss.type, 
                         loss.gradient = object$loss.gradient, w0 = object$coefficients, training = object$training)",sep="")))
       newobject$parameters <- list(eta = rbind(object$parameters$eta, newobject$parameters$eta))
     }
-
-    #$$
-    if ( (object$model == "MMLprod") ) {
-      # if (is.null(object$parameters$alpha) || !is.null(object$parameters$grid.alpha)) {
-      #   if (is.null(object$parameters$grid.alpha)) {
-      #     object$parameters$grid.alpha <- 10^(-4:-1)
-      #   }
-      #   newobject <- MMLprodCalib(y = newY, experts = newexperts, awake = awake, 
-      #                                loss.type = object$loss.type, loss.gradient = object$loss.gradient, 
-      #                                w0 = object$coefficients, gamma = object$parameters$gamma, 
-      #                                grid.alpha = object$parameters$grid.alpha, training = object$training)
-      #   newobject$parameters$eta <- rbind(object$parameters$eta, newobject$parameters$eta)
-      #   newobject$parameters$alpha <- c(object$parameters$alpha, newobject$parameters$alpha)
-      # } else {
-        newobject <- MMLprod(y = newY, experts = newexperts, 
-                                alpha = object$parameters$alpha, awake = awake, loss.type = object$loss.type, 
-                                loss.gradient = object$loss.gradient, 
-                                training = object$training)
-      #}
-      newobject$parameters <- list(eta = rbind(object$parameters$eta, newobject$parameters$eta))
-    }
-    #$$
     
     if (object$model == "EWA") {
       if (is.null(object$parameters$eta) || !is.null(object$parameters$grid.eta)) {
@@ -1431,103 +851,12 @@ predictReal <- function(object, newexperts = NULL, newY = NULL, awake = NULL,
                          w0 = object$coefficients, training = object$training)
       }
     }
-    if (object$model == "FS") {
-      if (is.null(object$parameters$eta) || is.null(object$parameters$alpha) || 
-          !is.null(object$parameters$grid.eta) || !is.null(object$parameters$grid.alpha)) {
-        if (is.null(object$parameters$grid.eta)) {
-          object$parameters$grid.eta <- 1
-        }
-        if (is.null(object$parameters$grid.alpha)) {
-          object$parameters$grid.alpha <- 10^(-4:-1)
-        }
-        newobject <- fixedshareCalib(y = newY, experts = newexperts, awake = awake, 
-                                     loss.type = object$loss.type, loss.gradient = object$loss.gradient, 
-                                     w0 = object$coefficients, gamma = object$parameters$gamma, grid.eta = object$parameters$grid.eta, 
-                                     grid.alpha = object$parameters$grid.alpha, training = object$training)
-        newobject$parameters$eta <- c(object$parameters$eta, newobject$parameters$eta)
-        newobject$parameters$alpha <- c(object$parameters$alpha, newobject$parameters$alpha)
-      } else {
-        newobject <- fixedshare(y = newY, experts = newexperts, eta = object$parameters$eta, 
-                                alpha = object$parameters$alpha, awake = awake, loss.type = object$loss.type, 
-                                loss.gradient = object$loss.gradient, w0 = object$coefficients, 
-                                training = object$training)
-      }
-    }
 
-    #$$
-    if ( (object$model == "FSBOA") || (object$model == "FSSOCOBOA") ) {
-      if (is.null(object$parameters$alpha) || !is.null(object$parameters$grid.alpha)) {
-        if (is.null(object$parameters$grid.alpha)) {
-          object$parameters$grid.alpha <- 10^(-4:-1)
-        }
-        newobject <- fixedshareBoaCalib(y = newY, experts = newexperts, awake = awake, 
-                                     loss.type = object$loss.type, loss.gradient = object$loss.gradient, 
-                                     w0 = object$coefficients, gamma = object$parameters$gamma, 
-                                     grid.alpha = object$parameters$grid.alpha, training = object$training)
-        newobject$parameters$eta <- rbind(object$parameters$eta, newobject$parameters$eta)
-        newobject$parameters$alpha <- c(object$parameters$alpha, newobject$parameters$alpha)
-      } else {
-        newobject <- fixedshareBoa(y = newY, experts = newexperts, 
-                                alpha = object$parameters$alpha, awake = awake, loss.type = object$loss.type, 
-                                loss.gradient = object$loss.gradient, w0 = object$coefficients, 
-                                training = object$training)
-      }
-    }
-    #$$
-
-    #$$
-    if (object$model == "SMH") {
-      if (is.null(object$parameters$eta) || is.null(object$parameters$alpha) || 
-          !is.null(object$parameters$grid.eta) || !is.null(object$parameters$grid.alpha)) {
-        if (is.null(object$parameters$grid.eta)) {
-          object$parameters$grid.eta <- 1
-        }
-        if (is.null(object$parameters$grid.alpha)) {
-          object$parameters$grid.alpha <- 10^(-4:-1)
-        }
-        newobject <- SMHCalib(y = newY, experts = newexperts, awake = awake, 
-                                     loss.type = object$loss.type, loss.gradient = object$loss.gradient, 
-                                     w0 = object$coefficients, gamma = object$parameters$gamma, grid.eta = object$parameters$grid.eta, 
-                                     grid.alpha = object$parameters$grid.alpha, training = object$training)
-        newobject$parameters$eta <- c(object$parameters$eta, newobject$parameters$eta)
-        newobject$parameters$alpha <- c(object$parameters$alpha, newobject$parameters$alpha)
-      } else {
-        newobject <- SMH(y = newY, experts = newexperts, eta = object$parameters$eta, 
-                                alpha = object$parameters$alpha, awake = awake, loss.type = object$loss.type, 
-                                loss.gradient = object$loss.gradient, w0 = object$coefficients, 
-                                training = object$training)
-      }
-    }
-    #$$
-
-    #$$
-    if (object$model == "SMBOA") {
-      if (is.null(object$parameters$alpha) || !is.null(object$parameters$grid.alpha)) {
-        if (is.null(object$parameters$grid.alpha)) {
-          object$parameters$grid.alpha <- 10^(-4:-1)
-        }
-        newobject <- smBOACalib(y = newY, experts = newexperts, awake = awake, 
-                                     loss.type = object$loss.type, loss.gradient = object$loss.gradient, 
-                                     w0 = object$coefficients, gamma = object$parameters$gamma, 
-                                     grid.alpha = object$parameters$grid.alpha, training = object$training)
-        newobject$parameters$eta <- rbind(object$parameters$eta, newobject$parameters$eta)
-        newobject$parameters$alpha <- c(object$parameters$alpha, newobject$parameters$alpha)
-      } else {
-        newobject <- smBOA(y = newY, experts = newexperts,
-                                alpha = object$parameters$alpha, awake = awake, loss.type = object$loss.type, 
-                                loss.gradient = object$loss.gradient, w0 = object$coefficients, 
-                                training = object$training)
-      }
-    }
-    #$$
-
-    #$$
     if (object$model == "NBM") {
       newobject <- nbm(y = newY, experts = newexperts, eta = object$parameters$eta, 
                         awake = awake, loss.type = object$loss.type, 
                         w0 = object$coefficients, training = object$training)
     }
-    #$$
 
     newobject$Y <- rbind(object$Y, matrix(newY, ncol = object$d))
     newobject$experts <- rbind(object$experts, newexperts)
@@ -1683,42 +1012,7 @@ ewaCalib <- function(y, experts, grid.eta = 1, awake = NULL, loss.type = "square
     
     # Update of the best parameter
     besteta <- order(cumulativeLoss)[1]
-    
-    # # We increase the size of the grid if the best parameter lies in an extremity
-    # if (besteta == neta) {
-    #   if (trace) 
-    #     cat(" + ")
-    #   neweta <- grid.eta[besteta] * gamma^(1:3)
-    #   grid.eta <- c(grid.eta, neweta)
-    #   neta <- neta + length(neweta)
-    #   R.w0 <- cbind(R.w0, array(0, dim = c(N, length(neweta))))
-    #   for (k in 1:length(neweta)) {
-    #     perfneweta <- ewa(c(training$oldY, y[1:t]), rbind(training$oldexperts, 
-    #       matrix(experts[1:t, ], ncol = N)), neweta[k], awake = rbind(training$oldawake, 
-    #       matrix(awake[1:t, ], ncol = N)), loss.type = loss.type, loss.gradient = loss.gradient, 
-    #       w0 = w0)
-    #     cumulativeLoss <- c(cumulativeLoss, perfneweta$training$cumulativeLoss)
-    #     R.w0[, besteta + k] <- perfneweta$training$R + log(w0) / neweta[k]
-    #   }
-    # }
-    
-    # if (besteta == 1) {
-    #   if (trace) 
-    #     cat(" - ")
-    #   neweta <- grid.eta[besteta]/gamma^(1:3)
-    #   neta <- neta + length(neweta)
-    #   besteta <- besteta + length(neweta)
-    #   R.w0 <- cbind(array(0, dim = c(N, length(neweta))), R.w0)
-    #   for (k in 1:length(neweta)) {
-    #     grid.eta <- c(neweta[k], grid.eta)
-    #     perfneweta <- ewa(y = c(training$oldY, y[1:t]), experts = rbind(training$oldexperts, 
-    #       matrix(experts[1:t, ], ncol = N)), eta = neweta[k], awake = rbind(training$oldawake, 
-    #       matrix(awake[1:t, ], ncol = N)), loss.type = loss.type, loss.gradient = loss.gradient, 
-    #       w0 = w0)
-    #     cumulativeLoss <- c(perfneweta$training$cumulativeLoss, cumulativeLoss)
-    #     R.w0[, besteta - k] <- perfneweta$training$R + log(w0) / neweta[k]
-    #   }
-    # }
+ 
     weta <- truncate1(exp(t(t(matrix(R.w0, ncol = neta)) * grid.eta)))
   }
   # Next weights
