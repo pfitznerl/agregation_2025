@@ -85,25 +85,6 @@ plot_a_e <- function(data,param,sta,window,start.date,end.date,names.experts){
 }
 
 ################################
-# Plot of the RMSE for the lead time ech
-plot_rmse_ech <-function(liste_window,rmse.ech,rmse.lim){
-  png(paste(dir_plot,dir_rmse,"rmse_resume","_ech",ech,"_tot.png",sep=""))
-  plot(liste_window, unlist(rmse.ech[[1]]),ylim=rmse.lim,type="b",col=liste_couleur[1])
-  legend("topright",legend=liste_agreg,fill=liste_couleur[1:length(liste_agreg)])
-  abline(h=min(unlist(rmse.ech[[1]])), lty = "dotted",col=liste_couleur[1])
-  #text(x=400,y=min(liste_recap[[1]]$rmse_mean),labels=min(liste_recap[[1]]$rmse_mean),col=liste_couleur[1])
-  if (length(liste_recap)>1){# if more than one aggregation strategy
-    for (iagreg in 2:length(liste_recap)){
-      points(liste_window, unlist(rmse.ech[[iagreg]]),type="b",col=liste_couleur[iagreg])
-      abline(h=min(unlist(rmse.ech[[iagreg]])), lty = "dotted",col=liste_couleur[iagreg])
-      #text(x=400,y=min(liste_recap[[l]]$rmse_mean),labels=min(liste_recap[[l]]$rmse_mean),col=liste_couleur[l])
-    }
-  }
-  dev.off()
-}
-################################
-
-################################
 # Plot of the parameters for the lead time ech
 # (ech can be "AllEch", this means that all the parameters of all the lead times have been concatenated)
 plot_parameters <-function(data_param,param,window,ech,n.sta){

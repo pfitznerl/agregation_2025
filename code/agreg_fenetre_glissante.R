@@ -122,17 +122,13 @@ sta=substr(strsplit(file_station, "_")[[1]][5],1,8) # station number
 window=1253 # window=1253 <=> no window, if window = w < 1253 => window=w
 #start and end date of the data ploted on the obs_pred... plots
 plot.periode=c("2021-12-01","2022-02-01") # plot period for Chamonix just before christmas 2021
-liste_exp_without=c("sd.aro","as.aro","sd.arp","as.arp","sd.cep","as.cep") # unbiased experts
 liste_exp_with=c("raw.aro","mos.aro","raw.arp","mos.arp","raw.cep","mos.cep","Q10","Q30","Q50","Q70","Q90") #experts to use if available in the used data
 liste_exp=liste_exp_with
 parametre="t"
 res="00"
 n.ech=length(liste_ech)
 #list of the agregation to run
-liste_agreg <- c("BOA") # c("BOA","EWA","MLpol","MLprod","NBM","bestConvex","bestExpert","UNIFORM")
-agreg=liste_agreg
-n.agreg=length(liste_agreg)
-liste_couleur <- c("red","blue","purple","green","yellow","black","pink","orange","azure4","deeppink")
+agreg <- c("BOA") # c("BOA","EWA","MLpol","MLprod","NBM","bestConvex","bestExpert","UNIFORM")
 ########################### end variables ##############################
 ########################################################################
 ########################################################################
