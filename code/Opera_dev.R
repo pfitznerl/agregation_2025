@@ -11,6 +11,37 @@ blockToSeries <- function(X){
   }
 }
 
+#function to remove columns of a data frame X with less than percentage% missing values
+rm_missing_col <- function(X,percentage) {
+    rm.col=c()
+    for (ncol in 1:ncol(X)){
+      nna=length(which(X[,ncol]==-100))+length(which(is.na(X[,ncol])))+length(which(X[,ncol]==-999)) #sum of the NA's and -100
+      if (nna>nrow(X)*percentage){rm.col <- c(rm.col,ncol)}
+    }
+    if (!is.null(rm.col)){X<-X[,-rm.col]} #keep only the experts with less than percentage % of missing values
+    return(X)
+}
+
+#function to evaluate the quantiles of the absolute error with 5% steps
+eval_quantiles_abs_error <- function(x,y){
+  abs_error=abs(x-y) #absolute error
+  quantile_abs_error=quantile(abs_error, probs = seq(0, 1, 1/20),na.rm=T)
+  return(quantile_abs_error)
+}
+
+#function to make the uniform agregation
+prevision_UNIFORM <- function(X,Y,T) {
+  # Remplace les NA par la moyenne de leur ligne
+  X_clean <- t(apply(X, 1, function(row) {
+    row_mean <- mean(row, na.rm = TRUE)  # Calcule la moyenne de la ligne (ignore les NA)
+    row[is.na(row)] <- row_mean          # Remplace les NA par la moyenne
+    row
+  }))
+  uniform_pred=apply(X_clean,1,mean)#prediction of the uniform aggregation
+  matrix_weights= matrix(1/ncol(X), nrow = nrow(X), ncol = ncol(X))
+  return(list(predictions=uniform_pred,weights=matrix_weights,mixture=NULL))
+}
+
 
 
 

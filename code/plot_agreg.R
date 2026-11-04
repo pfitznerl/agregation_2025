@@ -433,7 +433,7 @@ plot_obs_pred_window <-function(X,pred.agreg,Y,date.valid,window,sta,ech,agreg){
   liste_expert[liste_expert == "raw.cep" ] <- "raw.ifs"
   df$date.valid=as.POSIXct(df$date.valid)
   df$date.valid=as.Date(df$date.valid) #type date from lubridate
-  datebreaks <- seq(df$date.valid[1], df$date.valid[length(df$date.valid)], by="1 day")# by "1 month" or by "1 day"
+  datebreaks <- seq(df$date.valid[1], df$date.valid[length(df$date.valid)], by="1 month")# by "1 month" or by "1 day"
   df<-df %>%
       dplyr::select(date.valid, c(all_of(liste_expert),all_of(agreg),obs)) %>%#,all_of(agreg)
       gather(key="modele", value="temperature",-date.valid)
@@ -469,7 +469,7 @@ plot_obs_pred_window <-function(X,pred.agreg,Y,date.valid,window,sta,ech,agreg){
           #scale_shape_manual(values = shape.values) + #type of shape for the points
           scale_colour_manual(values=color.values) + #colours
           scale_size_manual(values = width.values) + #sizes
-          scale_x_date(breaks=datebreaks,labels=date_format("%d")) + #x axes with datebreaks, %d for days number, %b for month
+          scale_x_date(breaks=datebreaks,labels=date_format("%b")) + #x axes with datebreaks, %d for days number, %b for month
           # scale_y_continuous(limits = c(-20, 10))+ # pour comparer avec et sans biased à chamonix sur le meme axe y
           labs(x="Date (December 2021)", y= "Temperature (°C)") + #title, x and y axes description
           theme(plot.title = element_text(colour="black", size=25), axis.title.x = element_text(colour="black",size=25),
