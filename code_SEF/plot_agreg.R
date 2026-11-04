@@ -155,9 +155,9 @@ plot_obs_pred_window <-function(X,pred.agreg,Y,date.valid,window,sta,ech,agreg){
   pred.agreg=as.data.frame(pred.agreg)
   df<-cbind(date.valid,pred.agreg,Y,X)
   if(length(which(substr(df$date.valid,1,10)==plot.periode[1]))==0 || length(which(substr(df$date.valid,1,10)==plot.periode[2]))==0)stop("plot period not in the data")
-  df=df[which(substr(df$date.valid,1,10)==plot.periode[1]):which(substr(df$date.valid,1,10)==plot.periode[2]),] #we only keep the data between plot.periode[1] and plot.periode[2]
+  df=df[which(substr(df$date.valid,1,10)==plot.periode[1]):which(substr(df$date.valid,1,10)==plot.periode[2]),] # we only keep the data between plot.periode[1] and plot.periode[2]
   names(df)[names(df) == "Y"] <- "obs"
-  names(df)[names(df) == "pred.agreg" | names(df) == "V1"] <- agreg #V1 for bestConvex which has no name i don't know why
+  names(df)[names(df) == "pred.agreg" | names(df) == "V1"] <- agreg # V1 for bestConvex which has no name I don't know why
   names(df)[names(df) == "mos.aro" ] <- "ppm.aro"
   names(df)[names(df) == "mos.arp" ] <- "ppm.arp"
   names(df)[names(df) == "mos.cep" ] <- "ppm.ifs"
@@ -167,46 +167,46 @@ plot_obs_pred_window <-function(X,pred.agreg,Y,date.valid,window,sta,ech,agreg){
   liste_expert[liste_expert == "mos.cep" ] <- "ppm.ifs"
   liste_expert[liste_expert == "raw.cep" ] <- "raw.ifs"
   df$date.valid=as.POSIXct(df$date.valid)
-  df$date.valid=as.Date(df$date.valid) #type date from lubridate
-  datebreaks <- seq(df$date.valid[1], df$date.valid[length(df$date.valid)], by="1 day")# by "1 month" or by "1 day"
+  df$date.valid=as.Date(df$date.valid) # type date from lubridate
+  datebreaks <- seq(df$date.valid[1], df$date.valid[length(df$date.valid)], by="1 month")# by "1 month" or by "1 day"
   df<-df %>%
       dplyr::select(date.valid, c(all_of(liste_expert),all_of(agreg),obs)) %>%#,all_of(agreg)
       gather(key="modele", value="temperature",-date.valid)
 
-  df <- transform(df, modele=factor(modele, levels=unique(modele))) #without this, ggplot don't plot the lines in the expected order (the order of the dataframe's columns)
-  #liste de couleur pour les experts
+  df <- transform(df, modele=factor(modele, levels=unique(modele))) # without this, ggplot doesn't plot the lines in the expected order (the order of the dataframe's columns)
+  # List of colors for the experts
   # Dynamically generate default color values
   #color.values = hue_pal()(length(liste_expert))
   color.values = c("springgreen2","springgreen4","gold2","goldenrod4","hotpink","deeppink","blue","deepskyblue","orange","brown","red","purple")
   color.values=color.values[1:length(liste_expert)]
   names(color.values) = liste_expert
-  s.colors=eval(parse(text=paste('c(obs="black",',agreg,'="yellow")',sep=""))) #special colors for the observations and the agregation
+  s.colors=eval(parse(text=paste('c(obs="black",',agreg,'="yellow")',sep=""))) # special colors for the observations and the aggregation
   color.values = c(color.values, s.colors)
   width.values=rep(2,length(liste_expert))
   names(width.values)=c(liste_expert)
-  s.width=eval(parse(text=paste('c(obs=4,',agreg,'=4)',sep=""))) #special width for the observations and the agregation
+  s.width=eval(parse(text=paste('c(obs=4,',agreg,'=4)',sep=""))) # special width for the observations and the aggregation
   width.values=c(width.values,s.width)
   line.type.values=c("dashed","solid","dashed","solid","dashed","solid","dashed","dashed","dashed","dashed","dashed") # dashed for raw outputs and solid for postprocessed outputs
   line.type.values=line.type.values[1:length(liste_expert)]
   names(line.type.values) = liste_expert
-  s.type.values=eval(parse(text=paste('c(obs="solid",',agreg,'="solid")',sep=""))) #solid lines for the observations and the agregation, dashed lines for the others
+  s.type.values=eval(parse(text=paste('c(obs="solid",',agreg,'="solid")',sep=""))) # solid lines for the observations and the aggregation, dashed lines for the others
   line.type.values=c(line.type.values,s.type.values)
   #shape.values=c(1:14)
 
   plot.df<-ggplot(df, aes(x=date.valid, y=temperature))+
           #theme_gray() +
-          theme_bw() + #theme, arriere plan... !!!!! le mettre au début, sinon ça peut ecraser le reste !!!!!!!!!!!
-          geom_line(aes(color = modele, size = modele ,linetype=modele)) + #to have the lines
-          geom_point(aes(color = modele, size = modele ,linetype=modele),show.legend = FALSE) + #to have the points/shapes
-          geom_vline(xintercept=as.numeric(datebreaks[1])+12, linetype='dashed', color='grey40',size=2)+#start of the event in chamonix
-          geom_vline(xintercept=as.numeric(datebreaks[1])+22, linetype='dashed', color='grey40',size=2)+#end of the event in chamonix
-          scale_linetype_manual(values=line.type.values) + #solid or dashed lines, and no legend
-          #scale_shape_manual(values = shape.values) + #type of shape for the points
-          scale_colour_manual(values=color.values) + #colours
-          scale_size_manual(values = width.values) + #sizes
-          scale_x_date(breaks=datebreaks,labels=date_format("%d")) + #x axes with datebreaks, %d for days number, %b for month
-          # scale_y_continuous(limits = c(-20, 10))+ # pour comparer avec et sans biased à chamonix sur le meme axe y
-          labs(x="Date (December 2021)", y= "Temperature (°C)") + #title, x and y axes description
+          theme_bw() + # theme, background... !!!!! put it at the beginning, otherwise it can overwrite the rest !!!!!!!!!!!
+          geom_line(aes(color = modele, size = modele ,linetype=modele)) + # to have the lines
+          geom_point(aes(color = modele, size = modele ,linetype=modele),show.legend = FALSE) + # to have the points/shapes
+          geom_vline(xintercept=as.numeric(datebreaks[1])+12, linetype='dashed', color='grey40',size=2)+# start of the event in Chamonix
+          geom_vline(xintercept=as.numeric(datebreaks[1])+22, linetype='dashed', color='grey40',size=2)+# end of the event in Chamonix
+          scale_linetype_manual(values=line.type.values) + # solid or dashed lines, and no legend
+          #scale_shape_manual(values = shape.values) + # type of shape for the points
+          scale_colour_manual(values=color.values) + # colors
+          scale_size_manual(values = width.values) + # sizes
+          scale_x_date(breaks=datebreaks,labels=date_format("%b")) + # x axes with datebreaks, %d for days number, %b for month
+          # scale_y_continuous(limits = c(-20, 10))+ # to compare with and without biased in Chamonix on the same y axis
+          labs(x="Date (December 2021)", y= "Temperature (°C)") + # title, x and y axes description
           theme(plot.title = element_text(colour="black", size=25), axis.title.x = element_text(colour="black",size=25),
             axis.title.y = element_text(colour="black",size=25),legend.text=element_text(size=25),
             axis.text.x = element_text(colour="black",size = 25),axis.text.y = element_text(colour="black",size = 25)) +
@@ -214,6 +214,7 @@ plot_obs_pred_window <-function(X,pred.agreg,Y,date.valid,window,sta,ech,agreg){
 
   ggsave(file=paste(dir_plot,dir_obs_pred,"obs_pred_",agreg,"_window",window,"_",ech,"_",sta,"_",plot.periode[1],"_",plot.periode[2],".pdf",sep=""), width=18, height=7, dpi=600)
   print(paste(dir_plot,dir_obs_pred,"obs_pred_",agreg,"_window",window,"_",ech,"_",sta,"_",plot.periode[1],"_",plot.periode[2],".pdf has been created",sep=""))
+
 }
 
 # Plot of observations, aggregation forecasts for multiple sliding windows over time/aggregation iterations
