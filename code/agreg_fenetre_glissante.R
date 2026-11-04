@@ -112,7 +112,7 @@ file.copy(
 ##############################################################################################
 set.seed(777)# to fix randomness
 # liste_ech : lead time for which to run the EA
-liste_ech=c("48") # c("6","9","12","15","18","21","24","27","30","33","36","39","42","45","48","57","72","84") #without lead time 3 because we use the observation of lead time 3 in the random forests
+liste_ech=c("48") # c("6","9","12","15","18","21","24","27","30","33","36","39","42","45","48","57","72","84") #without lead time 3 because we use the observation of lead time 3 in the random forests for the SEF
 ech=liste_ech
 # liste_station : station for which to run the EA
 liste_station <- paste("data/donnee_t_00_",ech,"_74056001.txt",sep="")
